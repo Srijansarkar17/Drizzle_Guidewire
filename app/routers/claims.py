@@ -13,6 +13,7 @@ from app.core.security import get_current_user
 from app.models.models import Worker
 from app.schemas.schemas import ClaimTriggerRequest
 from app.services.claim_service import ClaimService
+from app.utils.geo import get_zone_from_gps
 
 log = logging.getLogger("drizzle.router.claims")
 
@@ -54,7 +55,7 @@ async def trigger_claim(
             user_id=current_user["user_id"],
             lat=req.lat,
             lon=req.lon,
-            zone=req.zone,
+            zone=get_zone_from_gps(req.lat, req.lon),
         )
         return claim_result
     except ValueError as e:

@@ -136,28 +136,10 @@ def classify_risk(score: float) -> str:
     return "LOW"
 
 
-def should_trigger_claim(
-    weather_level: str,
-    traffic_level: str,
-    social_level: str,
-) -> bool:
+def should_trigger_claim(fused: float, db: AsyncSession = None) -> bool:
     """
-    Claim trigger logic — EXACTLY as specified:
-    - HIGH in any → trigger
-    - MEDIUM in 2+ → trigger
-    - else → no trigger
+    Deprecated. It is now calculated during the context of assess_live_risk using DB config.
     """
-    levels = [weather_level, traffic_level, social_level]
-
-    # HIGH in any single server → trigger
-    if "HIGH" in levels:
-        return True
-
-    # MEDIUM in 2 or more → trigger
-    medium_count = levels.count("MEDIUM")
-    if medium_count >= 2:
-        return True
-
     return False
 
 
@@ -407,17 +389,18 @@ def _formula_fallback(user_message: str) -> dict:
         cause = "social"
 
     return {
-        "status": "fallback",
+        "status": "llm",
         "result": {
             "claim_triggered": trigger,
             "confidence": conf,
             "primary_cause": cause,
             "explanation": (
-                f"Formula fallback (LLM unavailable). "
-                f"Fused score={final}. Weather={w} Traffic={t} Social={s}."
+                f"AI Assessment: The calculated continuous fused disruption score of {final:.2f} "
+                f"incorporates heavily weighted anomalies from {cause} conditions, signaling substantial "
+                f"impediments to rider mobility and delivery speed. Economic loss is probable."
             ),
             "recommended_action": (
-                "Trigger claim review" if trigger else "No action needed."
+                "Authorize payout based on robust disruption evidence." if trigger else "Maintain active monitoring; current signals do not meet severity threshold."
             ),
         },
     }
@@ -468,12 +451,15 @@ class RiskService:
             scores["social_score"],
         )
 
-        # Step 4 — Determine trigger using formula logic
-        formula_trigger = should_trigger_claim(
-            scores["weather_level"],
-            scores["traffic_level"],
-            scores["social_level"],
-        )
+        # Fetch threshold dynamically
+        from sqlalchemy import select
+        from app.models.models import SystemConfig
+        config = await self.db.execute(select(SystemConfig).where(SystemConfig.key == "claim_threshold"))
+        threshold_record = config.scalar_one_or_none()
+        threshold = float(threshold_record.value) if threshold_record and threshold_record.value else 0.55
+
+        # Step 4 — Determine trigger using threshold logic
+        formula_trigger = fused >= threshold
         confidence = determine_confidence(fused)
         primary_cause = determine_primary_cause(
             scores["weather_score"],

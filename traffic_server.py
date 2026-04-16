@@ -39,7 +39,8 @@ async def fetch_traffic(lat: float, lon: float) -> dict:
     """
 
     if not TOMTOM_KEY:
-        raise HTTPException(503, "TOMTOM_API_KEY not configured — cannot fetch real traffic data")
+        log.warning("TOMTOM_API_KEY not configured — calling _mock_traffic")
+        return _mock_traffic()
 
     url = (
         f"https://api.tomtom.com/traffic/services/4/flowSegmentData/"

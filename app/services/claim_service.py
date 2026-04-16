@@ -297,6 +297,23 @@ class ClaimService:
         gps_valid = True
         gps_distance_km = 0.0
 
+        # Check location mismatch
+        from app.utils.geo import get_zone_from_gps
+        worker_record = await self.db.execute(select(Worker).where(Worker.id == worker_id))
+        worker_record = worker_record.scalar_one_or_none()
+        if worker_record and worker_record.zone:
+            derived_zone = get_zone_from_gps(lat, lon)
+            if derived_zone != "Default-Zone" and worker_record.zone != "Default-Zone" and derived_zone != worker_record.zone:
+                fraud_score += 0.8
+                gps_valid = False
+                fraud_flag = FraudFlag(
+                    claim_id=None,
+                    flag_type="location_mismatch",
+                    severity=0.9,
+                    description=f"Claim location ({derived_zone}) does not match registered zone ({worker_record.zone})",
+                )
+                self.db.add(fraud_flag)
+
         # Check claim frequency in last 24 hours
         cutoff = datetime.now(timezone.utc).replace(
             hour=0, minute=0, second=0, microsecond=0

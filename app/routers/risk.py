@@ -12,6 +12,7 @@ from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.models import Worker
 from app.services.risk_service import RiskService
+from app.utils.geo import get_zone_from_gps
 
 log = logging.getLogger("drizzle.router.risk")
 
@@ -43,7 +44,6 @@ async def get_live_risk(
         if worker and worker.gps_lat and worker.gps_lon:
             lat = worker.gps_lat
             lon = worker.gps_lon
-            zone = zone or worker.zone
         else:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -53,7 +53,7 @@ async def get_live_risk(
                 ),
             )
 
-    zone = zone or (worker.zone if worker else None)
+    zone = get_zone_from_gps(lat, lon)
     worker_id = worker.id if worker else None
 
     try:

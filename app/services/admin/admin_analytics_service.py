@@ -106,7 +106,7 @@ class AdminAnalyticsService:
                 func.count(Claim.id).label("claim_count"),
                 func.coalesce(func.sum(Claim.payout_amount), 0).label("total_payout"),
             )
-            .where(Claim.zone.isnot(None))
+            .where(Claim.zone.isnot(None), Claim.status == "approved")
             .group_by(Claim.zone)
             .order_by(func.count(Claim.id).desc())
             .limit(10)
@@ -124,7 +124,7 @@ class AdminAnalyticsService:
             select(func.count(Claim.id)).where(Claim.status == "rejected")
         )).scalar() or 0
         total_payout = (await self.db.execute(
-            select(func.coalesce(func.sum(Claim.payout_amount), 0))
+            select(func.coalesce(func.sum(Claim.payout_amount), 0)).where(Claim.status == "approved")
         )).scalar() or 0.0
 
         # Summary

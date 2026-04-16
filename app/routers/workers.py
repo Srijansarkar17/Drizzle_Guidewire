@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.models import Worker
+from app.utils.geo import get_zone_from_gps
 from app.schemas.schemas import (
     WorkerProfileCreate,
     WorkerProfileResponse,
@@ -33,6 +34,17 @@ async def create_worker_profile(
     """
     user_id = current_user["user_id"]
 
+    # Ensure phone uniqueness to prevent duplicate workers
+    if req.phone:
+        phone_check = await db.execute(
+            select(Worker).where(Worker.phone == req.phone, Worker.id != user_id)
+        )
+        if phone_check.scalar_one_or_none():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Phone number already registered to another worker."
+            )
+
     # Check if profile already exists — Worker.id IS auth_users.id (shared PK)
     result = await db.execute(
         select(Worker).where(Worker.id == user_id)
@@ -44,7 +56,7 @@ async def create_worker_profile(
         existing.full_name = req.full_name
         existing.phone = req.phone
         existing.vehicle_type = req.vehicle_type
-        existing.zone = req.zone
+        existing.zone = get_zone_from_gps(req.gps_lat, req.gps_lon) if req.gps_lat and req.gps_lon else req.zone
         existing.gps_lat = req.gps_lat
         existing.gps_lon = req.gps_lon
         if req.daily_income_estimate is not None:
@@ -60,7 +72,7 @@ async def create_worker_profile(
             full_name=req.full_name,
             phone=req.phone,
             vehicle_type=req.vehicle_type,
-            zone=req.zone,
+            zone=get_zone_from_gps(req.gps_lat, req.gps_lon) if req.gps_lat and req.gps_lon else req.zone,
             gps_lat=req.gps_lat,
             gps_lon=req.gps_lon,
             daily_income_estimate=req.daily_income_estimate or 1000,
